@@ -1,0 +1,192 @@
+<?xml version='1.0' encoding='utf-8'?>
+<harness_options>
+  <length>
+    <string_value lines="1">long</string_value>
+  </length>
+  <owner>
+    <string_value lines="1">shsim</string_value>
+  </owner>
+  <description>
+    <string_value lines="1">Run a suite of one way coupled magma/mantle ridge models with temperature/strain rate dependent viscosity (diffusion, dislocation and ddvm), Gamma and thermal feedback.  
+
+Varying parameters: 
+Resolution - Scalefactor, h_on_L (aspect ratio), # meltdepth
+n - exponent on porosity for permeabiliy K
+dp_A - DDVM constant
+dp_B - DDVM constant
+U0 - half spreading rate
+T1 - mantle potential temperature
+pipewidth - initial porosity pipe width at ridge axis
+pipetheta - initial porosity pipe angle at ridge axis
+pipedepth - initial porosity pipe depth at ridge axis (need it to connect 'well' with the main melting region)</string_value>
+  </description>
+  <simulations>
+    <simulation name="tridge">
+      <input_file>
+        <string_value lines="1" type="filename">fluid_fieldsplit_Rfreezing/ridgemodel.tfml</string_value>
+      </input_file>
+      <run_when name="input_changed_or_output_missing"/>
+      <number_processes>
+        <integer_value rank="0">2</integer_value>
+      </number_processes>
+      <parameter_sweep>
+        <parameter name="scalefactor">
+          <values>
+            <string_value lines="1">1.</string_value>
+          </values>
+          <comment>global scaling parameter for the ridgemesh</comment>
+        </parameter>
+        <parameter name="h_on_L">
+          <values>
+            <string_value lines="1">6.</string_value>
+          </values>
+          <comment>mesh refinement parameter</comment>
+        </parameter>
+        <parameter name="U0">
+          <values>
+            <string_value lines="1">12.6752351256115e-10</string_value>
+            <comment>6.33761756280579e-10 = 2cm/yr
+12.6752351256115e-10=4cm/yr
+25.3504702512230e-10=8cm/yr</comment>
+          </values>
+          <update>
+            <string_value lines="20" type="code" language="python">import libspud
+libspud.set_option("/system::GlobalCoefficients/coefficient::U0/type::Constant/rank::Scalar/value::WholeMesh/constant", float(U0))</string_value>
+            <single_build/>
+          </update>
+        </parameter>
+        <parameter name="Rrate">
+          <values>
+            <string_value lines="1">200.</string_value>
+          </values>
+          <update>
+            <string_value lines="20" type="code" language="python">import libspud
+libspud.set_option("/system::GlobalCoefficients/coefficient::FreezingRate/type::Constant/rank::Scalar/value::WholeMesh/constant", float(Rrate))</string_value>
+            <single_build/>
+          </update>
+          <comment>Freezing rate constant. This should change proportionately with Spreading rate. 100, 200, 400 for half spreading rate 2, 4, 8 cm/yr.</comment>
+        </parameter>
+        <parameter name="K0">
+          <values>
+            <string_value lines="1">4.e-7</string_value>
+            <comment>9e-6 to 4e-9</comment>
+          </values>
+          <update>
+            <string_value lines="20" type="code" language="python">import libspud
+libspud.set_option("/system::TVP_solid/coefficient::K0/type::Constant/rank::Scalar/value::WholeMesh/constant", float(K0))</string_value>
+          </update>
+        </parameter>
+      </parameter_sweep>
+      <dependencies>
+        <simulation name="Solid">
+          <input_file>
+            <string_value lines="1" type="filename">solid/ridgemodel.tfml</string_value>
+          </input_file>
+          <run_when name="input_changed_or_output_missing"/>
+          <number_processes>
+            <integer_value rank="0">2</integer_value>
+          </number_processes>
+          <parameter_sweep>
+            <parameter name="scalefactor">
+              <comment>global scaling parameter for the ridgemesh</comment>
+            </parameter>
+            <parameter name="h_on_L"/>
+            <parameter name="U0">
+              <update>
+                <string_value lines="20" type="code" language="python">import libspud
+libspud.set_option("/system::GlobalCoefficients/coefficient::U0/type::Constant/rank::Scalar/value::WholeMesh/constant", float(U0))</string_value>
+                <single_build/>
+              </update>
+            </parameter>
+            <parameter name="K0">
+              <update>
+                <string_value lines="20" type="code" language="python">import libspud
+libspud.set_option("/system::TVP_solid/coefficient::K0/type::Constant/rank::Scalar/value::WholeMesh/constant", float(K0))</string_value>
+                <single_build/>
+              </update>
+            </parameter>
+          </parameter_sweep>
+          <required_output>
+            <filenames name="xmlfiles">
+              <string>
+                <string_value lines="1" type="filename">myridgemodel_solid_TVP_solid_0.xml, myridgemodel_solid.det, myridgemodel_solid.det.dat, myridgemodel_solid_Viscosity_0.xml, myridgemodel_solid_Gamma_Solidsystem_0.xml</string_value>
+              </string>
+            </filenames>
+          </required_output>
+          <dependencies>
+            <run name="Mesh">
+              <input_file>
+                <string_value lines="1" type="filename">meshes/ridgemesh_template.geo</string_value>
+              </input_file>
+              <run_when name="input_changed_or_output_missing"/>
+              <parameter_sweep>
+                <parameter name="scalefactor"/>
+                <parameter name="h_on_L">
+                  <update>
+                    <string_value lines="20" type="code" language="python">from string import Template as template
+
+
+input_file = template(input_file).safe_substitute({'scalefactor':scalefactor,'h_on_L':h_on_L})</string_value>
+                  </update>
+                </parameter>
+              </parameter_sweep>
+              <required_output>
+                <filenames name="Mesh">
+                  <string>
+                    <string_value lines="1" type="filename">ridgemesh.xml.gz</string_value>
+                  </string>
+                </filenames>
+              </required_output>
+              <commands>
+                <command name="gmsh">
+                  <string_value lines="1">gmsh -2 -algo del2d -v 0 ridgemesh_template.geo -o  ridgemesh.msh</string_value>
+                </command>
+                <command name="convert">
+                  <string_value lines="1">dolfin-convert ridgemesh.msh ridgemesh.xml</string_value>
+                </command>
+                <command name="compress">
+                  <string_value lines="1">gzip ridgemesh.xml</string_value>
+                </command>
+              </commands>
+            </run>
+          </dependencies>
+        </simulation>
+        <run name="Mesh">
+          <input_file>
+            <string_value lines="1" type="filename">meshes/ridgemesh_template.geo</string_value>
+          </input_file>
+          <run_when name="input_changed_or_output_missing"/>
+          <parameter_sweep>
+            <parameter name="scalefactor"/>
+            <parameter name="h_on_L">
+              <update>
+                <string_value lines="20" type="code" language="python">from string import Template as template
+
+
+input_file = template(input_file).safe_substitute({'scalefactor':scalefactor,'h_on_L':h_on_L})</string_value>
+              </update>
+            </parameter>
+          </parameter_sweep>
+          <required_output>
+            <filenames name="Mesh">
+              <string>
+                <string_value lines="1" type="filename">ridgemesh.xml.gz</string_value>
+              </string>
+            </filenames>
+          </required_output>
+          <commands>
+            <command name="gmsh">
+              <string_value lines="1">gmsh -2 -algo del2d -v 0 ridgemesh_template.geo -o  ridgemesh.msh</string_value>
+            </command>
+            <command name="convert">
+              <string_value lines="1">dolfin-convert ridgemesh.msh ridgemesh.xml</string_value>
+            </command>
+            <command name="compress">
+              <string_value lines="1">gzip ridgemesh.xml</string_value>
+            </command>
+          </commands>
+        </run>
+      </dependencies>
+    </simulation>
+  </simulations>
+</harness_options>
